@@ -1,1 +1,46 @@
+import java.io.*;
 
+public class BufferTest {
+
+    public static void main(String [] agrs){
+        try {
+        FileInputStream fis = new FileInputStream("/Users/wangning/javacode/filetest/test1");
+        FileInputStream fis2 = new FileInputStream("/Users/wangning/javacode/filetest/test1");
+        FileOutputStream fos1 = new FileOutputStream("/Users/wangning/javacode/filetest/test2");
+        FileOutputStream fos2 = new FileOutputStream("/Users/wangning/javacode/filetest/test3");
+
+            BufferedInputStream fbi = new BufferedInputStream(fis2);
+            BufferedOutputStream fbo = new BufferedOutputStream(fos2);
+
+            long starttime1 = System.currentTimeMillis();
+            byte[] b = new byte[1024000];
+            int n = 0;
+            while ((n = (fis.read(b))) != -1) {
+                fos1.write(b,0,n);
+            }
+
+            long endtime1 = System.currentTimeMillis();
+            System.out.println(endtime1-starttime1);
+
+//            byte[] c = new byte[1024000];
+            int m = 0;
+            while ((m = (fbi.read(b))) != -1) {
+                fbo.write(b,0,m);
+            }
+            fbi.close();
+            fbo.close();
+
+            long endtime2 = System.currentTimeMillis();
+            System.out.println(endtime2-endtime1);
+            fis.close();
+            fis2.close();
+            fos1.close();
+            fos2.close();
+
+        }catch (FileNotFoundException e){
+            e.printStackTrace();
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+}
