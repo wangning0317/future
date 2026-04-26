@@ -313,6 +313,18 @@
   #importPreview .preview-block .it b { color:var(--accent); margin-right:6px; }
   .alert.err { background:rgba(245,68,79,.08); border:1px solid rgba(245,68,79,.4);
     color:#ff9aa2; padding:10px 14px; border-radius:8px; font-size:12px; }
+
+  /* Excel sheet/column picker (inside modal) */
+  .xlsx-picker { background:rgba(91,141,239,.06); border:1px solid rgba(91,141,239,.3);
+    border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+  .xlsx-picker .x-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+  .xlsx-picker label { font-size:11.5px; color:var(--text-2); font-weight:600; }
+  .xlsx-picker select { background:var(--panel); border:1px solid var(--border);
+    color:var(--text); padding:6px 10px; border-radius:7px; font-size:12px; outline:none;
+    font-family:"SF Mono",Menlo,monospace; min-width:180px; }
+  .xlsx-picker select:focus { border-color:var(--primary); }
+  .xlsx-picker .x-stat { font-size:11.5px; color:var(--muted); margin-top:4px; }
+  .xlsx-picker .x-stat b { color:var(--accent); }
 </style>
 </head>
 <body>
@@ -629,19 +641,39 @@
     </div>
     <div class="modal-body">
       <div class="notice">
-        粘贴或上传含 <b>2 列</b>的原始数据：<b>C 列（销售配置名称）</b> + <b>F 列（11 位 SKU 码）</b><br>
-        操作：在 Excel/WPS/Numbers 中选中 C/F 两列 → <kbd>Ctrl+C</kbd> → 粘贴到下方文本框。也支持上传 CSV/TSV 文件。<br>
-        系统将自动识别：品牌系列 / SOP 年 / 配置等级 / 续航 / 动力 / 轮毂 / 外饰 / 内饰 / 选装包，并填入各维度。
+        支持 <b>3 种导入方式</b>：<br>
+        ① 上传 <b>Excel (.xlsx/.xls)</b> 文件 → 选择工作表与 C/F 列 → 自动提取<br>
+        ② 上传 <b>CSV/TSV/TXT</b> 文件<br>
+        ③ 直接<b>粘贴</b>两列内容（C 列描述 + F 列 11 位 SKU 码，制表符或逗号分隔）<br>
+        系统将识别：品牌系列 / SOP 年 / 配置等级 / 续航 / 动力 / 轮毂 / 外饰 / 内饰 / 选装包。
       </div>
-      <textarea id="importPaste" placeholder="示例：
+
+      <div class="import-actions" style="margin-top:0; margin-bottom:10px;">
+        <input type="file" id="importFile" accept=".xlsx,.xls,.xlsm,.csv,.tsv,.txt" />
+        <span style="font-size:11.5px; color:var(--muted);">⬆ 选择文件后会自动读取</span>
+      </div>
+
+      <div class="xlsx-picker hidden" id="xlsxPicker">
+        <div class="x-row">
+          <label>工作表</label>
+          <select id="xlsxSheet"></select>
+          <label>C 列（描述）</label>
+          <select id="xlsxColC"></select>
+          <label>F 列（11位SKU）</label>
+          <select id="xlsxColF"></select>
+          <button class="btn tiny" id="btnXlsxExtract">📋 提取至文本框</button>
+        </div>
+        <div class="x-stat" id="xlsxStat"></div>
+      </div>
+
+      <textarea id="importPaste" placeholder="示例（用 Tab 分隔两列）：
 小鹏GX 超级增程 430四驱Ultra科技旗舰 21英寸低风阻轮毂 座舱升级包 AI调光玻璃 二排娱乐套装 电动门+DLP 电动踏板 暗香红 静谧白	GABT9213DK1
 小鹏GX 超级增程 430四驱Ultra科技旗舰 21英寸低风阻轮毂 座舱升级包 AI调光玻璃 二排娱乐套装 电动门+DLP 电动踏板 暗香红 林雾紫	GABT9213DK5
 ..."></textarea>
       <div class="import-actions">
-        <input type="file" id="importFile" accept=".csv,.tsv,.txt" />
         <button class="btn ghost" id="btnParseImport">🔍 解析数据</button>
         <span style="flex:1"></span>
-        <span style="font-size:11.5px; color:var(--muted);">支持: 制表符 / CSV 粘贴 · 表头会自动跳过</span>
+        <span style="font-size:11.5px; color:var(--muted);">表头自动跳过 · F 列识别为 11 位字母数字</span>
       </div>
       <div id="importPreview"></div>
     </div>
@@ -656,6 +688,9 @@
 </div>
 
 <div id="toast" class="toast"></div>
+
+<!-- SheetJS standalone, loaded from same folder -->
+<script src="xlsx.full.min.js"></script>
 
 <script>
 /* =========================================================================================
@@ -1605,24 +1640,119 @@ $('#btnImport').addEventListener('click', () => {
   $('#importPaste').value = '';
   $('#importFile').value = '';
   $('#importPreview').innerHTML = '';
+  $('#xlsxPicker').classList.add('hidden');
   $('#btnApplyImport').disabled = true;
   _parsedImport = null;
+  _xlsxWorkbook = null;
 });
 $('#importClose').addEventListener('click', closeImport);
 $('#importCancel').addEventListener('click', closeImport);
 function closeImport() { $('#importModal').classList.add('hidden'); }
 $('#importModal').addEventListener('click', e => { if (e.target.id === 'importModal') closeImport(); });
 
-$('#importFile').addEventListener('change', e => {
+$('#importFile').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    $('#importPaste').value = ev.target.result;
-    toast('文件已读入文本框，点击「解析数据」继续');
-  };
-  reader.readAsText(file, 'UTF-8');
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'xlsm' || ext === 'xlsb') {
+    await handleXlsxFile(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      $('#importPaste').value = ev.target.result;
+      $('#xlsxPicker').classList.add('hidden');
+      toast('文件已读入，点击「解析数据」继续');
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
 });
+
+let _xlsxWorkbook = null;
+async function handleXlsxFile(file) {
+  if (typeof XLSX === 'undefined') {
+    $('#importPreview').innerHTML = `<div class="alert err">⚠ xlsx 解析库未加载。请确保 <code>xlsx.full.min.js</code> 与 index.html 在同一目录。</div>`;
+    return;
+  }
+  try {
+    const buf = await file.arrayBuffer();
+    _xlsxWorkbook = XLSX.read(buf, { type:'array' });
+    setupXlsxPicker(file.name);
+    toast(`已读取 ${file.name}，请确认工作表与列`);
+  } catch (err) {
+    console.error(err);
+    $('#importPreview').innerHTML = `<div class="alert err">Excel 解析失败：${err.message || err}</div>`;
+  }
+}
+
+function setupXlsxPicker(filename) {
+  const wb = _xlsxWorkbook;
+  if (!wb) return;
+  const picker = $('#xlsxPicker');
+  picker.classList.remove('hidden');
+  const sheetSel = $('#xlsxSheet');
+  sheetSel.innerHTML = wb.SheetNames.map(n =>
+    `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join('');
+  const prefer = wb.SheetNames.find(n => n.includes('基础数据')) || wb.SheetNames[0];
+  sheetSel.value = prefer;
+  refreshXlsxColumns();
+  sheetSel.onchange = refreshXlsxColumns;
+}
+
+function refreshXlsxColumns() {
+  const wb = _xlsxWorkbook;
+  if (!wb) return;
+  const sheetName = $('#xlsxSheet').value;
+  const ws = wb.Sheets[sheetName];
+  if (!ws || !ws['!ref']) {
+    $('#xlsxStat').innerHTML = '<span style="color:var(--danger)">该工作表为空</span>';
+    return;
+  }
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const headers = [];
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const addr = XLSX.utils.encode_cell({ r: range.s.r, c });
+    const cell = ws[addr];
+    const name = cell ? String(cell.v || '').trim() : '';
+    headers.push({ idx: c, letter: XLSX.utils.encode_col(c), name });
+  }
+  // 自动检测
+  const cIdx = headers.findIndex(h => /(C端销售配置名称|销售配置|配置名称|描述)/.test(h.name));
+  const fIdx = headers.findIndex(h => /(车型配置码|配置码|SKU.*码|11位)/.test(h.name));
+  const colCSel = $('#xlsxColC');
+  const colFSel = $('#xlsxColF');
+  const opts = headers.map(h =>
+    `<option value="${h.idx}">${h.letter} · ${escapeHtml(h.name || '(空)')}</option>`).join('');
+  colCSel.innerHTML = opts;
+  colFSel.innerHTML = opts;
+  colCSel.value = cIdx >= 0 ? cIdx : 2;  // 默认 C 列
+  colFSel.value = fIdx >= 0 ? fIdx : 5;  // 默认 F 列
+  const total = range.e.r - range.s.r;
+  $('#xlsxStat').innerHTML = `工作表 <b>${escapeHtml(sheetName)}</b> · 数据行 <b>${total}</b> · 列数 <b>${headers.length}</b>${cIdx>=0?' · 已自动识别 C 列':''}${fIdx>=0?' · 已自动识别 F 列':''}`;
+}
+
+$('#btnXlsxExtract').addEventListener('click', () => {
+  const wb = _xlsxWorkbook;
+  if (!wb) { toast('请先选择 Excel 文件'); return; }
+  const sheetName = $('#xlsxSheet').value;
+  const ws = wb.Sheets[sheetName];
+  const cIdx = parseInt($('#xlsxColC').value, 10);
+  const fIdx = parseInt($('#xlsxColF').value, 10);
+  const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false });
+  const lines = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const c = String(row[cIdx] || '').trim();
+    const f = String(row[fIdx] || '').trim();
+    if (f) lines.push(`${c}\t${f}`);
+  }
+  $('#importPaste').value = lines.join('\n');
+  toast(`已从「${sheetName}」提取 ${lines.length} 行，下面点「解析数据」`);
+});
+
+function escapeHtml(s) {
+  return String(s||'').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
 
 $('#btnParseImport').addEventListener('click', () => {
   const text = $('#importPaste').value || '';
