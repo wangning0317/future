@@ -275,6 +275,44 @@
   .year-table .yc.current { background:var(--chip-active); border-color:var(--primary); color:#fff; }
   .year-table .yc .y { color:var(--text-2); font-size:10px; }
   .year-table .yc .c { color:var(--accent); font-weight:700; }
+
+  /* Import modal */
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.65); backdrop-filter:blur(4px);
+    z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .modal { background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);
+    border:1px solid var(--border); border-radius:14px; width:920px; max-width:100%;
+    max-height:90vh; display:flex; flex-direction:column; box-shadow:0 30px 80px rgba(0,0,0,.6); }
+  .modal-head { padding:16px 20px; border-bottom:1px solid var(--border);
+    display:flex; justify-content:space-between; align-items:center; }
+  .modal-head h3 { margin:0; font-size:15px; }
+  .modal-body { padding:18px 20px; overflow-y:auto; flex:1; }
+  .modal-foot { padding:14px 20px; border-top:1px solid var(--border);
+    display:flex; justify-content:flex-end; gap:8px; }
+  .modal-close { background:transparent; border:none; color:var(--muted); cursor:pointer;
+    font-size:22px; line-height:1; padding:0; }
+  .modal-close:hover { color:var(--text); }
+  #importPaste { width:100%; height:140px; background:var(--bg-2); border:1px solid var(--border);
+    color:var(--text); padding:10px; border-radius:8px; font-family:"SF Mono",Menlo,monospace;
+    font-size:11.5px; outline:none; resize:vertical; }
+  #importPaste:focus { border-color:var(--primary); }
+  .import-actions { display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+  .import-actions input[type=file] { background:var(--bg-2); border:1px solid var(--border);
+    color:var(--text-2); padding:7px 10px; border-radius:7px; font-size:12px; }
+  #importPreview { margin-top:14px; }
+  #importPreview .preview-head { font-size:12.5px; color:var(--text-2); margin-bottom:8px; }
+  #importPreview .preview-head b { color:var(--accent); }
+  #importPreview .preview-block { margin-bottom:14px; background:var(--bg-2);
+    border:1px solid var(--border); border-radius:10px; padding:10px 14px; }
+  #importPreview .preview-block .title { font-size:12px; color:var(--text); font-weight:600;
+    margin-bottom:6px; display:flex; justify-content:space-between; }
+  #importPreview .preview-block .title .cnt { color:var(--accent); }
+  #importPreview .preview-block .items { display:flex; flex-wrap:wrap; gap:6px; }
+  #importPreview .preview-block .it { background:var(--panel); border:1px solid var(--border);
+    color:var(--text-2); padding:3px 8px; border-radius:5px; font-size:11.5px;
+    font-family:"SF Mono",Menlo,monospace; }
+  #importPreview .preview-block .it b { color:var(--accent); margin-right:6px; }
+  .alert.err { background:rgba(245,68,79,.08); border:1px solid rgba(245,68,79,.4);
+    color:#ff9aa2; padding:10px 14px; border-radius:8px; font-size:12px; }
 </style>
 </head>
 <body>
@@ -289,6 +327,7 @@
     </div>
   </div>
   <div class="header-actions">
+    <button class="btn" id="btnImport">📥 导入原始数据</button>
     <button class="btn ghost" id="btnLoadG01">⤓ 载入 G01 示例</button>
     <button class="btn ghost" id="btnClearAll">⌫ 全部清空</button>
   </div>
@@ -579,6 +618,41 @@
 <footer class="foot">
   规范：Q5/XP-005B.013-2025 · 11 位整车编码 · 单文件离线 · 数据保留在当前会话内，刷新即清空
 </footer>
+</div>
+
+<!-- Import Modal -->
+<div class="modal-bg hidden" id="importModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>📥 导入原始 SKU 数据 · 反向拆解</h3>
+      <button class="modal-close" id="importClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="notice">
+        粘贴或上传含 <b>2 列</b>的原始数据：<b>C 列（销售配置名称）</b> + <b>F 列（11 位 SKU 码）</b><br>
+        操作：在 Excel/WPS/Numbers 中选中 C/F 两列 → <kbd>Ctrl+C</kbd> → 粘贴到下方文本框。也支持上传 CSV/TSV 文件。<br>
+        系统将自动识别：品牌系列 / SOP 年 / 配置等级 / 续航 / 动力 / 轮毂 / 外饰 / 内饰 / 选装包，并填入各维度。
+      </div>
+      <textarea id="importPaste" placeholder="示例：
+小鹏GX 超级增程 430四驱Ultra科技旗舰 21英寸低风阻轮毂 座舱升级包 AI调光玻璃 二排娱乐套装 电动门+DLP 电动踏板 暗香红 静谧白	GABT9213DK1
+小鹏GX 超级增程 430四驱Ultra科技旗舰 21英寸低风阻轮毂 座舱升级包 AI调光玻璃 二排娱乐套装 电动门+DLP 电动踏板 暗香红 林雾紫	GABT9213DK5
+..."></textarea>
+      <div class="import-actions">
+        <input type="file" id="importFile" accept=".csv,.tsv,.txt" />
+        <button class="btn ghost" id="btnParseImport">🔍 解析数据</button>
+        <span style="flex:1"></span>
+        <span style="font-size:11.5px; color:var(--muted);">支持: 制表符 / CSV 粘贴 · 表头会自动跳过</span>
+      </div>
+      <div id="importPreview"></div>
+    </div>
+    <div class="modal-foot">
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2); margin-right:auto;">
+        <input type="checkbox" id="optPreselect" checked /> Step 3 中预选导入的 SKU
+      </label>
+      <button class="btn ghost" id="importCancel">取消</button>
+      <button class="btn" id="btnApplyImport" disabled>应用到工作台 →</button>
+    </div>
+  </div>
 </div>
 
 <div id="toast" class="toast"></div>
@@ -1099,7 +1173,12 @@ function generateCombos() {
     });
   });
   state.combos = combos;
-  state.selection = new Set(combos.map(c => c.id));
+  // 若刚刚通过"导入"应用过维度，则只预选与导入 SKU 编码一致的组合；否则默认全选
+  if (_importedSkuSet && _importedSkuSet.size) {
+    state.selection = new Set(combos.filter(c => _importedSkuSet.has(c.fullSku)).map(c => c.id));
+  } else {
+    state.selection = new Set(combos.map(c => c.id));
+  }
   state.page = 1;
   state.filter = { level:'', power:'', exterior:'', interior:'', wheel:'', search:'' };
 }
@@ -1514,6 +1593,284 @@ $('#btnExportAll').addEventListener('click', () => {
   download(JSON.stringify(pkg, null, 2), `SKU全量包_${ts}.json`, 'application/json');
   toast('已导出全量包');
 });
+
+/* =========================================================================================
+ *  Reverse Decompose: 导入原始 SKU 数据 → 维度
+ * ======================================================================================= */
+let _parsedImport = null;
+let _importedSkuSet = null;  // 应用后用于 Step 3 预选
+
+$('#btnImport').addEventListener('click', () => {
+  $('#importModal').classList.remove('hidden');
+  $('#importPaste').value = '';
+  $('#importFile').value = '';
+  $('#importPreview').innerHTML = '';
+  $('#btnApplyImport').disabled = true;
+  _parsedImport = null;
+});
+$('#importClose').addEventListener('click', closeImport);
+$('#importCancel').addEventListener('click', closeImport);
+function closeImport() { $('#importModal').classList.add('hidden'); }
+$('#importModal').addEventListener('click', e => { if (e.target.id === 'importModal') closeImport(); });
+
+$('#importFile').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    $('#importPaste').value = ev.target.result;
+    toast('文件已读入文本框，点击「解析数据」继续');
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+
+$('#btnParseImport').addEventListener('click', () => {
+  const text = $('#importPaste').value || '';
+  if (!text.trim()) { toast('请先粘贴或上传数据'); return; }
+  const rows = parseTextToRows(text);
+  if (!rows.length) {
+    $('#importPreview').innerHTML = `<div class="alert err">未识别到任何 11 位 SKU。请检查：每行需要包含 <code>C列描述</code> 与 <code>F列11位编码</code>，列之间用 Tab 或英文逗号分隔。</div>`;
+    $('#btnApplyImport').disabled = true; return;
+  }
+  const result = reverseDecompose(rows);
+  if (!result || !result.dims.level.length) {
+    $('#importPreview').innerHTML = `<div class="alert err">解析到 ${rows.length} 行 SKU 但未能拆解维度，请检查描述字段格式。</div>`;
+    $('#btnApplyImport').disabled = true; return;
+  }
+  _parsedImport = result;
+  renderImportPreview(result);
+  $('#btnApplyImport').disabled = false;
+});
+
+$('#btnApplyImport').addEventListener('click', () => {
+  if (!_parsedImport) return;
+  state.base = structuredClone(_parsedImport.base);
+  state.dims = structuredClone(_parsedImport.dims);
+  _importedSkuSet = $('#optPreselect').checked
+    ? new Set(_parsedImport.rawRows.map(r => r.fullSku))
+    : null;
+  renderBaseInfo();
+  renderAllDimCards();
+  closeImport();
+  toast(`已应用：识别 ${_parsedImport.rawRows.length} 条 SKU，填充 ${_parsedImport.dims.level.length} 配置等级`);
+});
+
+function parseTextToRows(text) {
+  const lines = text.split(/\r?\n/);
+  const rows = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let parts = line.split('\t');
+    if (parts.length < 2) parts = parseCsvLine(line);
+    if (parts.length < 2) parts = [line];
+
+    let f = null, c = null;
+    for (const p of parts) {
+      const v = (p || '').trim();
+      if (!v) continue;
+      if (!f && /^[0-9A-Z]{11}$/i.test(v)) f = v.toUpperCase();
+      else if (v.length > 5 && (!c || v.length > c.length)) c = v;
+    }
+    if (f) rows.push({ c: c || '', f });
+  }
+  return rows;
+}
+
+function parseCsvLine(line) {
+  const out = []; let cur = '', inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuote) {
+      if (ch === '"' && line[i+1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') inQuote = false;
+      else cur += ch;
+    } else {
+      if (ch === ',') { out.push(cur); cur = ''; }
+      else if (ch === '"') inQuote = true;
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function reverseDecompose(rows) {
+  const POWER_LABEL_MAP = {
+    '超级增程':'REEV', '增程':'REEV', '增程版':'REEV',
+    '超级电动':'BEV', '纯电':'BEV', '电动':'BEV', '纯电版':'BEV',
+    'PHEV':'PHEV', '插混':'PHEV',
+  };
+
+  const parsed = rows.map(r => {
+    const f = r.f.toUpperCase();
+    const tokens = (r.c || '').trim().split(/\s+/).filter(Boolean);
+
+    let exterior_name = null, interior_name = null, wheel_name = null;
+    let packages = [], preWheel = [];
+    if (tokens.length >= 4) {
+      interior_name = tokens[tokens.length - 1];
+      exterior_name = tokens[tokens.length - 2];
+      let wIdx = -1;
+      for (let i = tokens.length - 3; i >= 0; i--) {
+        if (/轮毂|车轮|wheel/i.test(tokens[i])) { wIdx = i; break; }
+      }
+      if (wIdx >= 0) {
+        wheel_name = tokens[wIdx];
+        packages = tokens.slice(wIdx + 1, tokens.length - 2);
+        preWheel = tokens.slice(0, wIdx);
+      } else {
+        preWheel = tokens.slice(0, tokens.length - 2);
+      }
+    } else {
+      preWheel = tokens;
+    }
+
+    return {
+      fullSku: f,
+      brandSeries: f.slice(0, 2),
+      levelCode: f.slice(2, 3),
+      sopCode: f.slice(3, 4),
+      optCode: f.slice(4, 7),
+      exteriorCode: f.slice(7, 9),
+      interiorCode: f.slice(9, 11),
+      description: r.c,
+      tokens, preWheel, wheel_name, packages, exterior_name, interior_name,
+    };
+  });
+
+  const brandSeries = mode(parsed.map(p => p.brandSeries));
+  const sopCode = mode(parsed.map(p => p.sopCode));
+  const sopYear = sopCodeToYear(sopCode);
+
+  // 配置等级：按 levelCode 分组，从 preWheel tokens 反推名称/续航/动力
+  const levelMap = new Map();
+  parsed.forEach(p => {
+    if (!levelMap.has(p.levelCode)) {
+      levelMap.set(p.levelCode, { code: p.levelCode, samples: [] });
+    }
+    levelMap.get(p.levelCode).samples.push(p.preWheel);
+  });
+  const levels = [...levelMap.values()].map(l => {
+    const sample = l.samples[0] || [];
+    let powerLabel = '', levelName = '';
+    if (sample.length >= 3) {
+      powerLabel = sample[1];
+      levelName = sample.slice(2).join(' ');
+    } else if (sample.length === 2) {
+      levelName = sample[1];
+    } else {
+      levelName = sample.join(' ') || l.code;
+    }
+    const kmMatch = levelName.match(/(\d{3,4})/);
+    const km = kmMatch ? Number(kmMatch[1]) : null;
+    const power = POWER_LABEL_MAP[powerLabel] || powerLabel || '';
+    return { code: l.code, name: levelName || l.code, km, power };
+  });
+
+  // 轮毂：按 wheel_name 唯一性 → 生成 W1/W2/W3
+  const wheelNames = [...new Set(parsed.map(p => p.wheel_name).filter(Boolean))];
+  const wheels = wheelNames.map((n, i) => ({ code: 'W' + (i+1), name: n }));
+
+  // 外饰：按 exteriorCode 分组
+  const extMap = new Map();
+  parsed.forEach(p => {
+    if (!p.exterior_name || !p.exteriorCode) return;
+    if (!extMap.has(p.exteriorCode)) extMap.set(p.exteriorCode, p.exterior_name);
+  });
+  const exteriors = [...extMap.entries()].map(([code, name]) => ({
+    code, name, hex: guessHexFromName(name),
+  }));
+
+  // 内饰
+  const intMap = new Map();
+  parsed.forEach(p => {
+    if (!p.interior_name || !p.interiorCode) return;
+    if (!intMap.has(p.interiorCode)) intMap.set(p.interiorCode, p.interior_name);
+  });
+  const interiors = [...intMap.entries()].map(([code, name]) => ({
+    code, name, hex: guessHexFromName(name),
+  }));
+
+  // 选装包：所有出现过的包名集合
+  const pkgNames = [...new Set(parsed.flatMap(p => p.packages))];
+  const packages = pkgNames.map((n, i) => ({ code: 'P' + (i+1), name: n }));
+
+  return {
+    base: { brandSeries, sopYear },
+    dims: { level: levels, wheel: wheels, exterior: exteriors, interior: interiors, package: packages },
+    rawRows: parsed,
+    sopCode,
+  };
+}
+
+function mode(arr) {
+  const cnt = new Map();
+  arr.forEach(v => cnt.set(v, (cnt.get(v)||0) + 1));
+  let best = null, max = 0;
+  cnt.forEach((c, v) => { if (c > max) { max = c; best = v; } });
+  return best;
+}
+
+function sopCodeToYear(code) {
+  const idx = SOP_CODES_30.indexOf(code);
+  if (idx < 0) return null;
+  const now = new Date().getFullYear();
+  const candidates = [2001 + idx, 2031 + idx, 2061 + idx];
+  return candidates.reduce((best, y) =>
+    Math.abs(y - now) < Math.abs(best - now) ? y : best, candidates[0]);
+}
+
+function guessHexFromName(name) {
+  if (!name) return '#cccccc';
+  const map = [
+    [/红|赤|火|霞/, '#A8313A'],
+    [/黑|暗|夜/, '#1A1A1A'],
+    [/白|银|霜|雪|月/, '#F0F0F0'],
+    [/灰|岩/, '#7A8290'],
+    [/金|黄|阳/, '#C9A867'],
+    [/蓝|海|空/, '#3A5C8A'],
+    [/绿|林|草/, '#5C7A5C'],
+    [/紫|雾|薰/, '#6B5A78'],
+    [/棕|褐|铂|沙|暮/, '#7A5C3F'],
+  ];
+  for (const [re, hex] of map) if (re.test(name)) return hex;
+  return '#cccccc';
+}
+
+function renderImportPreview(r) {
+  const html = `
+    <div class="preview-head">已识别 <b>${r.rawRows.length}</b> 条 SKU · 品牌系列 <b>${r.base.brandSeries}</b> · SOP 年 <b>${r.base.sopYear || '?'}</b> (代码 <b>${r.sopCode}</b>)</div>
+    <div class="preview-block">
+      <div class="title">配置等级 <span class="cnt">${r.dims.level.length}</span></div>
+      <div class="items">${r.dims.level.map(l => `<span class="it"><b>${l.code}</b>${l.name}${l.km?` · ${l.km}km`:''}${l.power?` · ${l.power}`:''}</span>`).join('')}</div>
+    </div>
+    <div class="preview-block">
+      <div class="title">轮毂 <span class="cnt">${r.dims.wheel.length}</span></div>
+      <div class="items">${r.dims.wheel.map(w => `<span class="it"><b>${w.code}</b>${w.name}</span>`).join('')}</div>
+    </div>
+    <div class="preview-block">
+      <div class="title">外饰（油漆） <span class="cnt">${r.dims.exterior.length}</span></div>
+      <div class="items">${r.dims.exterior.map(e => `<span class="it"><b>${e.code}</b>${e.name}</span>`).join('')}</div>
+    </div>
+    <div class="preview-block">
+      <div class="title">内饰 <span class="cnt">${r.dims.interior.length}</span></div>
+      <div class="items">${r.dims.interior.map(i => `<span class="it"><b>${i.code}</b>${i.name}</span>`).join('')}</div>
+    </div>
+    <div class="preview-block">
+      <div class="title">选装包 <span class="cnt">${r.dims.package.length}</span></div>
+      <div class="items">${r.dims.package.map(p => `<span class="it"><b>${p.code}</b>${p.name}</span>`).join('')}</div>
+    </div>
+    <details>
+      <summary>原始 SKU 列表（前 50 条）</summary>
+      <div style="font-family:'SF Mono',Menlo,monospace; font-size:11px; color:var(--text-2); line-height:1.6; max-height:200px; overflow-y:auto; padding-top:6px;">
+        ${r.rawRows.slice(0,50).map(p => `<div><code style="color:var(--accent)">${p.fullSku}</code> · ${p.description||''}</div>`).join('')}
+        ${r.rawRows.length > 50 ? `<div style="color:var(--muted); padding-top:6px;">… 共 ${r.rawRows.length} 条，其余略</div>` : ''}
+      </div>
+    </details>
+  `;
+  $('#importPreview').innerHTML = html;
+}
 
 /* =========================================================================================
  *  Boot
