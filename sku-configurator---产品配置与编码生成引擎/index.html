@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SKU 全量生成工作台 · Cartesian + Cherry-pick</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-2: #11172e;
+    --panel: #161d3a;
+    --panel-2: #1c2547;
+    --border: #2a3360;
+    --text: #e6eaff;
+    --text-2: #a3acd6;
+    --muted: #6b7399;
+    --primary: #5b8def;
+    --primary-2: #3d6fe0;
+    --accent: #00d4ff;
+    --success: #2bd576;
+    --warn: #f5a524;
+    --danger: #f5444f;
+    --chip: #232c55;
+    --chip-active: #2c4a9c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft Yahei",sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  body { min-height:100vh; background:
+    radial-gradient(1000px 600px at 80% -10%, rgba(91,141,239,.18), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(0,212,255,.14), transparent 60%),
+    var(--bg);
+  }
+  .app { max-width:1480px; margin:0 auto; padding:22px 26px 80px; }
+
+  /* Header */
+  header.app-header { display:flex; align-items:center; justify-content:space-between;
+    padding:4px 4px 16px; gap:16px; flex-wrap:wrap; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .brand-mark { width:38px; height:38px; border-radius:9px;
+    background:linear-gradient(135deg,var(--primary),var(--accent));
+    display:grid; place-items:center; color:#08111f; font-weight:800; font-size:13px;
+    box-shadow:0 8px 22px rgba(91,141,239,.35); }
+  .brand h1 { font-size:17px; margin:0; letter-spacing:.3px; }
+  .brand .sub { font-size:12px; color:var(--text-2); margin-top:2px; }
+  .header-actions { display:flex; gap:8px; }
+
+  /* Stepper */
+  .stepper { display:flex; gap:6px; margin-bottom:18px; background:var(--panel);
+    border:1px solid var(--border); border-radius:14px; padding:6px; }
+  .step-btn { flex:1; padding:11px 14px; border-radius:10px; cursor:pointer;
+    transition:all .15s ease; user-select:none; display:flex; align-items:center; gap:10px;
+    color:var(--text-2); font-size:13px; }
+  .step-btn .num { width:24px; height:24px; border-radius:50%;
+    background:var(--bg-2); display:grid; place-items:center; color:var(--text-2);
+    font-weight:700; font-size:12px; flex-shrink:0; border:1px solid var(--border); }
+  .step-btn:hover { color:var(--text); background:rgba(91,141,239,.08); }
+  .step-btn.active { background:linear-gradient(135deg,rgba(91,141,239,.2),rgba(0,212,255,.1));
+    color:#fff; border-color:var(--primary); }
+  .step-btn.active .num { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .step-btn.done .num { background:var(--success); color:#08111f; border-color:var(--success); }
+  .step-btn .step-title { font-weight:600; }
+  .step-btn .step-desc { font-size:11px; color:var(--muted); margin-top:1px; }
+  .step-btn-text { display:flex; flex-direction:column; }
+
+  /* Card */
+  .card { background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);
+    border:1px solid var(--border); border-radius:16px; padding:22px;
+    box-shadow:0 18px 40px rgba(0,0,0,.25); }
+  .card h2 { font-size:15px; margin:0 0 14px; display:flex; align-items:center; gap:10px; }
+  .card h2 .badge-num { background:var(--primary); color:#fff; padding:2px 10px;
+    border-radius:999px; font-size:11px; font-weight:700; }
+
+  /* Pill / chip */
+  .pill { background:var(--bg-2); border:1px solid var(--border); color:var(--text-2);
+    padding:5px 12px; border-radius:999px; font-size:12px; }
+  .pill b { color:var(--accent); font-weight:600; }
+
+  /* Buttons */
+  button.btn { background:var(--primary); border:none; color:#fff; padding:9px 14px;
+    border-radius:9px; font-size:12.5px; font-weight:600; cursor:pointer;
+    transition:all .15s ease; }
+  button.btn:hover { background:var(--primary-2); transform:translateY(-1px); }
+  button.btn.ghost { background:transparent; border:1px solid var(--border); color:var(--text-2); }
+  button.btn.ghost:hover { color:var(--text); border-color:var(--primary); }
+  button.btn.danger { background:transparent; border:1px solid rgba(245,68,79,.4);
+    color:var(--danger); }
+  button.btn.danger:hover { background:rgba(245,68,79,.1); }
+  button.btn.tiny { padding:4px 10px; font-size:11px; border-radius:6px; }
+  button.btn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
+
+  /* Step 1: dimension grid */
+  .dim-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+  @media (max-width:980px) { .dim-grid { grid-template-columns:1fr; } }
+  .dim-card { background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:14px; }
+  .dim-card h3 { margin:0 0 10px; font-size:13px; color:var(--text); display:flex;
+    align-items:center; justify-content:space-between; }
+  .dim-card h3 .meta { color:var(--muted); font-size:11px; font-weight:400; }
+  .dim-rows { display:flex; flex-direction:column; gap:6px; max-height:280px; overflow-y:auto;
+    padding-right:4px; }
+  .dim-rows::-webkit-scrollbar { width:6px; }
+  .dim-rows::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  .dim-row { display:flex; gap:6px; align-items:center; }
+  .dim-row input[type=text], .dim-row input[type=number] {
+    flex:1; min-width:0; background:var(--panel); border:1px solid var(--border);
+    color:var(--text); padding:6px 9px; border-radius:6px; font-size:12px; outline:none; }
+  .dim-row input:focus { border-color:var(--primary); }
+  .dim-row input.code { font-family:"SF Mono",Menlo,monospace; max-width:80px; flex:0 0 80px; }
+  .dim-row input.km { max-width:70px; flex:0 0 70px; }
+  .dim-row input.color { max-width:40px; flex:0 0 40px; padding:0; height:28px;
+    background:transparent; cursor:pointer; }
+  .dim-row .del { background:transparent; border:1px solid var(--border); color:var(--muted);
+    width:26px; height:26px; border-radius:6px; cursor:pointer; flex-shrink:0;
+    transition:all .15s ease; font-size:14px; line-height:1; }
+  .dim-row .del:hover { color:var(--danger); border-color:var(--danger); }
+  .dim-actions { display:flex; gap:6px; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); }
+
+  /* Step 2: combinations */
+  .combo-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:10px; margin-bottom:14px; }
+  .combo-stat { background:var(--bg-2); border:1px solid var(--border); border-radius:10px;
+    padding:11px 14px; }
+  .combo-stat .label { font-size:11px; color:var(--text-2); }
+  .combo-stat .value { font-size:18px; color:var(--text); font-weight:700; margin-top:3px;
+    font-family:"SF Mono",Menlo,monospace; }
+  .combo-stat .value.accent { color:var(--accent); }
+  .combo-formula { background:var(--bg-2); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; font-family:"SF Mono",Menlo,monospace; font-size:13px;
+    color:var(--text-2); margin-bottom:14px; line-height:1.7; }
+  .combo-formula b { color:var(--accent); font-weight:700; }
+  .combo-formula .total { font-size:18px; color:#fff; }
+
+  /* Step 3: cherry pick table */
+  .filter-bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+    margin-bottom:12px; padding:12px; background:var(--bg-2); border:1px solid var(--border);
+    border-radius:10px; }
+  .filter-bar select, .filter-bar input { background:var(--panel); border:1px solid var(--border);
+    color:var(--text); padding:7px 10px; border-radius:7px; font-size:12.5px; outline:none; }
+  .filter-bar select:focus, .filter-bar input:focus { border-color:var(--primary); }
+  .filter-bar label { font-size:11px; color:var(--text-2); margin-right:4px; }
+  .filter-bar .spacer { flex:1; }
+
+  .selection-bar { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .sel-stat { font-size:12px; color:var(--text-2); }
+  .sel-stat b { color:var(--accent); font-size:13px; }
+
+  /* Tables */
+  .tbl-wrap { overflow-x:auto; max-height:560px; overflow-y:auto;
+    border:1px solid var(--border); border-radius:10px; background:var(--bg-2); }
+  table.tbl { width:100%; border-collapse:collapse; font-size:12.5px; }
+  table.tbl th, table.tbl td { padding:8px 12px; text-align:left;
+    border-bottom:1px solid var(--border); white-space:nowrap; }
+  table.tbl thead th { background:var(--panel); color:var(--text-2);
+    font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.5px;
+    position:sticky; top:0; z-index:2; }
+  table.tbl td code { color:var(--accent); font-family:"SF Mono",Menlo,monospace;
+    font-size:11.5px; background:rgba(0,212,255,.08); padding:2px 6px; border-radius:4px; }
+  table.tbl tr:hover td { background:rgba(91,141,239,.06); }
+  table.tbl tr.selected td { background:rgba(43,213,118,.06); }
+  table.tbl .swatch { display:inline-block; width:12px; height:12px; border-radius:50%;
+    margin-right:6px; vertical-align:-1px; border:1px solid rgba(255,255,255,.25); }
+  table.tbl input[type=checkbox] { cursor:pointer; }
+  table.tbl .badge-pwr { font-size:11px; padding:2px 7px; border-radius:999px;
+    border:1px solid; font-weight:600; }
+  .badge-pwr.reev, .badge-pwr.增程 { color:var(--warn); border-color:rgba(245,165,36,.4);
+    background:rgba(245,165,36,.08); }
+  .badge-pwr.bev, .badge-pwr.纯电 { color:var(--success); border-color:rgba(43,213,118,.4);
+    background:rgba(43,213,118,.08); }
+
+  .pagination { display:flex; gap:6px; align-items:center; justify-content:center;
+    margin-top:12px; }
+  .pagination button { background:var(--bg-2); border:1px solid var(--border);
+    color:var(--text-2); padding:5px 11px; border-radius:6px; font-size:12px;
+    cursor:pointer; }
+  .pagination button:hover { color:var(--text); border-color:var(--primary); }
+  .pagination button.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .pagination .ellipsis { color:var(--muted); padding:5px 4px; }
+  .pagination .info { font-size:12px; color:var(--text-2); margin:0 10px; }
+
+  /* Step 4 export tables */
+  .export-grid { display:grid; gap:18px; }
+  .export-section { background:var(--bg-2); border:1px solid var(--border);
+    border-radius:12px; padding:14px; }
+  .export-section h3 { margin:0 0 10px; font-size:14px; display:flex;
+    justify-content:space-between; align-items:center; }
+  .export-section h3 .actions { display:flex; gap:6px; }
+
+  .matrix-cell { text-align:center; }
+  .tag-yes { color:var(--success); font-weight:700; }
+  .tag-no { color:var(--muted); }
+
+  /* Toast */
+  .toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%);
+    background:#0a0f23; border:1px solid var(--border); color:var(--text);
+    padding:10px 16px; border-radius:10px; font-size:13px;
+    box-shadow:0 12px 30px rgba(0,0,0,.5);
+    opacity:0; transition:opacity .25s ease, transform .25s ease;
+    pointer-events:none; z-index:100; }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(-4px); }
+
+  .hidden { display:none !important; }
+
+  .empty-state { text-align:center; padding:40px 20px; color:var(--muted); }
+  .empty-state .icon { font-size:36px; margin-bottom:10px; opacity:.5; }
+  .empty-state .msg { font-size:13px; margin-bottom:14px; }
+
+  footer.foot { margin-top:28px; text-align:center; color:var(--muted); font-size:12px; }
+
+  /* Power select chips inline (in dim row) */
+  .power-select { display:flex; gap:4px; }
+  .power-select .pchip { padding:4px 10px; background:var(--panel); border:1px solid var(--border);
+    color:var(--text-2); border-radius:6px; font-size:11px; cursor:pointer; user-select:none; }
+  .power-select .pchip.active { background:var(--chip-active); color:#fff; border-color:var(--primary); }
+
+  details { background:var(--bg-2); border:1px solid var(--border); border-radius:10px;
+    padding:10px 12px; margin-bottom:12px; }
+  details summary { cursor:pointer; font-size:12px; color:var(--text-2); }
+  details summary:hover { color:var(--text); }
+  details[open] summary { color:var(--text); margin-bottom:8px; }
+  details code { color:var(--accent); font-size:11.5px; }
+  details kbd { background:var(--panel); border:1px solid var(--border); padding:1px 5px;
+    border-radius:4px; font-size:11px; color:var(--text); }
+</style>
+</head>
+<body>
+<div class="app">
+
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark">SKU</div>
+    <div>
+      <h1>SKU 全量生成工作台</h1>
+      <div class="sub">维度配置 → 笛卡尔组合 → 拣选有效 SKU → 导出明细表与配置表 · 即开即用</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn ghost" id="btnLoadG01">⤓ 载入 G01 示例</button>
+    <button class="btn ghost" id="btnClearAll">⌫ 清空所有维度</button>
+  </div>
+</header>
+
+<div class="stepper">
+  <div class="step-btn active" data-step="1">
+    <div class="num">1</div>
+    <div class="step-btn-text">
+      <div class="step-title">维度配置</div>
+      <div class="step-desc">定义续航/动力/外饰/内饰/轮毂/选装包</div>
+    </div>
+  </div>
+  <div class="step-btn" data-step="2">
+    <div class="num">2</div>
+    <div class="step-btn-text">
+      <div class="step-title">组合生成</div>
+      <div class="step-desc">笛卡尔积一键产出全部可能</div>
+    </div>
+  </div>
+  <div class="step-btn" data-step="3">
+    <div class="num">3</div>
+    <div class="step-btn-text">
+      <div class="step-title">拣选 SKU</div>
+      <div class="step-desc">筛选与勾选有效组合</div>
+    </div>
+  </div>
+  <div class="step-btn" data-step="4">
+    <div class="num">4</div>
+    <div class="step-btn-text">
+      <div class="step-title">导出表</div>
+      <div class="step-desc">SKU 明细表 + 配置表</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ STEP 1 : 维度配置 ============ -->
+<section id="step-1" class="card">
+  <h2><span class="badge-num">STEP 1</span>维度配置</h2>
+  <details>
+    <summary>📖 使用说明（点击展开）</summary>
+    <div style="font-size:12px; color:var(--text-2); line-height:1.7;">
+      为每个维度增删改条目。所有维度都将参与笛卡尔积组合。<br>
+      • <b>续航版本</b>：每行包含编码 / 名称 / 续航值(km)<br>
+      • <b>动力类型</b>：通常为 REEV / BEV / PHEV 等<br>
+      • <b>外饰 / 内饰</b>：编码 / 名称 / 颜色<br>
+      • <b>轮毂 / 选装包</b>：编码 / 名称<br>
+      字段留空时该行将被忽略。点击右上「⤓ 载入 G01 示例」可填入小鹏 GX 真实数据。
+    </div>
+  </details>
+
+  <div class="dim-grid">
+    <div class="dim-card" data-dim="range">
+      <h3>① 续航版本 <span class="meta">code · 名称 · km</span></h3>
+      <div class="dim-rows"></div>
+      <div class="dim-actions">
+        <button class="btn tiny" data-act="add">+ 新增</button>
+        <button class="btn ghost tiny" data-act="clear">清空</button>
+      </div>
+    </div>
+
+    <div class="dim-card" data-dim="power">
+      <h3>② 动力类型 <span class="meta">code · 名称</span></h3>
+      <div class="dim-rows"></div>
+      <div class="dim-actions">
+        <button class="btn tiny" data-act="add">+ 新增</button>
+        <button class="btn ghost tiny" data-act="clear">清空</button>
+      </div>
+    </div>
+
+    <div class="dim-card" data-dim="exterior">
+      <h3>③ 外饰颜色 <span class="meta">code · 名称 · 色值</span></h3>
+      <div class="dim-rows"></div>
+      <div class="dim-actions">
+        <button class="btn tiny" data-act="add">+ 新增</button>
+        <button class="btn ghost tiny" data-act="clear">清空</button>
+      </div>
+    </div>
+
+    <div class="dim-card" data-dim="interior">
+      <h3>④ 内饰颜色 <span class="meta">code · 名称 · 色值</span></h3>
+      <div class="dim-rows"></div>
+      <div class="dim-actions">
+        <button class="btn tiny" data-act="add">+ 新增</button>
+        <button class="btn ghost tiny" data-act="clear">清空</button>
+      </div>
+    </div>
+
+    <div class="dim-card" data-dim="wheel">
+      <h3>⑤ 轮毂 <span class="meta">code · 名称</span></h3>
+      <div class="dim-rows"></div>
+      <div class="dim-actions">
+        <button class="btn tiny" data-act="add">+ 新增</button>
+        <button class="btn ghost tiny" data-act="clear">清空</button>
+      </div>
+    </div>
+
+    <div class="dim-card" data-dim="package">
+      <h3>⑥ 选装包 <span class="meta">code · 短码 · 名称</span></h3>
+      <div class="dim-rows"></div>
+      <div class="dim-actions">
+        <button class="btn tiny" data-act="add">+ 新增</button>
+        <button class="btn ghost tiny" data-act="clear">清空</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
+    <div class="pill" id="dimSummary">已配置：— / — / — / — / — / —</div>
+    <button class="btn" id="btnGoStep2">下一步：组合生成 →</button>
+  </div>
+</section>
+
+<!-- ============ STEP 2 : 组合生成 ============ -->
+<section id="step-2" class="card hidden">
+  <h2><span class="badge-num">STEP 2</span>组合生成</h2>
+
+  <div class="combo-formula" id="comboFormula"></div>
+
+  <div class="combo-summary" id="comboSummary"></div>
+
+  <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+    <button class="btn" id="btnGenerateCombos">⚡ 生成全部组合</button>
+    <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2);">
+      <input type="checkbox" id="optPackagePower" /> 选装包按"独立 0/1"展开（关闭则只产出"全标配"+"全可选"两态）
+    </label>
+    <span class="spacer" style="flex:1;"></span>
+    <button class="btn ghost" id="btnPrev2">← 上一步</button>
+    <button class="btn" id="btnGoStep3" disabled>下一步：拣选 SKU →</button>
+  </div>
+
+  <div id="comboPreview"></div>
+</section>
+
+<!-- ============ STEP 3 : 拣选 SKU ============ -->
+<section id="step-3" class="card hidden">
+  <h2><span class="badge-num">STEP 3</span>拣选 SKU</h2>
+
+  <div class="filter-bar">
+    <label>续航</label><select data-filter="range"><option value="">全部</option></select>
+    <label>动力</label><select data-filter="power"><option value="">全部</option></select>
+    <label>外饰</label><select data-filter="exterior"><option value="">全部</option></select>
+    <label>内饰</label><select data-filter="interior"><option value="">全部</option></select>
+    <label>轮毂</label><select data-filter="wheel"><option value="">全部</option></select>
+    <input type="text" placeholder="搜索 SKU 编码 / 名称…" id="searchInput" style="flex:1; min-width:160px;"/>
+    <button class="btn ghost tiny" id="btnClearFilter">清空筛选</button>
+  </div>
+
+  <div class="selection-bar">
+    <span class="sel-stat">已选：<b id="selCount">0</b> / 当前筛选：<b id="filterCount">0</b> / 全部：<b id="totalCount">0</b></span>
+    <span style="flex:1;"></span>
+    <button class="btn ghost tiny" id="btnSelectFiltered">✓ 选中筛选项</button>
+    <button class="btn ghost tiny" id="btnUnselectFiltered">✕ 取消筛选项</button>
+    <button class="btn ghost tiny" id="btnInvertSel">⇅ 反选</button>
+    <button class="btn ghost tiny" id="btnSelectAll">全选</button>
+    <button class="btn ghost tiny" id="btnSelectNone">全不选</button>
+    <span style="width:8px;"></span>
+    <button class="btn ghost" id="btnPrev3">← 上一步</button>
+    <button class="btn" id="btnGoStep4">下一步：导出表 →</button>
+  </div>
+
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="chkAllPage" title="本页全选/全不选" /></th>
+          <th>#</th>
+          <th>SKU 编码</th>
+          <th>续航</th>
+          <th>动力</th>
+          <th>轮毂</th>
+          <th>外饰</th>
+          <th>内饰</th>
+          <th>选装包</th>
+        </tr>
+      </thead>
+      <tbody id="comboTbody"></tbody>
+    </table>
+  </div>
+  <div class="pagination" id="pagination"></div>
+</section>
+
+<!-- ============ STEP 4 : 导出表 ============ -->
+<section id="step-4" class="card hidden">
+  <h2><span class="badge-num">STEP 4</span>导出表</h2>
+  <div class="combo-summary">
+    <div class="combo-stat"><div class="label">已选 SKU</div><div class="value accent" id="exportSelCount">0</div></div>
+    <div class="combo-stat"><div class="label">续航版本数</div><div class="value" id="exportRangeCount">0</div></div>
+    <div class="combo-stat"><div class="label">外饰组合数</div><div class="value" id="exportExtCount">0</div></div>
+    <div class="combo-stat"><div class="label">轮毂组合数</div><div class="value" id="exportWheelCount">0</div></div>
+  </div>
+
+  <div class="export-grid">
+    <div class="export-section">
+      <h3>📋 SKU 明细表 <div class="actions">
+        <button class="btn tiny" data-export="detail-csv">⬇ CSV</button>
+        <button class="btn tiny ghost" data-export="detail-json">⬇ JSON</button>
+        <button class="btn tiny ghost" data-export="detail-copy">📋 复制 TSV</button>
+      </div></h3>
+      <div class="tbl-wrap" style="max-height:400px;">
+        <table class="tbl" id="detailTable"></table>
+      </div>
+    </div>
+
+    <div class="export-section">
+      <h3>📊 配置表（按续航版本汇总） <div class="actions">
+        <button class="btn tiny" data-export="config-csv">⬇ CSV</button>
+        <button class="btn tiny ghost" data-export="config-json">⬇ JSON</button>
+      </div></h3>
+      <div class="tbl-wrap" style="max-height:300px;">
+        <table class="tbl" id="configTable"></table>
+      </div>
+    </div>
+
+    <div class="export-section">
+      <h3>🎨 外饰 × 内饰 × 续航 矩阵 <div class="actions">
+        <button class="btn tiny ghost" data-export="matrix-csv">⬇ CSV</button>
+      </div></h3>
+      <div class="tbl-wrap" style="max-height:400px;">
+        <table class="tbl" id="matrixTable"></table>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:18px; display:flex; gap:8px;">
+    <button class="btn ghost" id="btnPrev4">← 返回拣选</button>
+    <span style="flex:1;"></span>
+    <button class="btn" id="btnExportAll">⬇ 一键打包导出（JSON）</button>
+  </div>
+</section>
+
+<footer class="foot">
+  纯前端 · 单文件 · 无网络依赖 · 数据保留在当前浏览器会话内，刷新即清空
+</footer>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+/* =========================================================================================
+ *  G01 示例数据
+ * ======================================================================================= */
+const SAMPLE_G01 = {
+  range: [
+    { code:'R1585', name:'1585四驱', km:1585, power:'REEV' },
+    { code:'R1550', name:'1550四驱', km:1550, power:'REEV' },
+    { code:'R750',  name:'750四驱',  km:750,  power:'BEV'  },
+    { code:'R665',  name:'665',      km:665,  power:'BEV'  },
+  ],
+  power: [
+    { code:'REEV', name:'增程' },
+    { code:'BEV',  name:'纯电' },
+  ],
+  exterior: [
+    { code:'3D',   name:'丹霞红',         hex:'#A8313A' },
+    { code:'ZH',   name:'峡湾灰',         hex:'#6E7680' },
+    { code:'WN',   name:'极地黑',         hex:'#0F0F0F' },
+    { code:'ZN',   name:'云漠金（哑光）',  hex:'#B59A6F' },
+    { code:'1B',   name:'珠峰白',         hex:'#F5F5F5' },
+    { code:'Z2',   name:'光影灰+新月银',  hex:'#9CA3B0' },
+  ],
+  interior: [
+    { code:'K1', name:'拂晓白', hex:'#EDE6D6' },
+    { code:'K5', name:'林雾紫', hex:'#5C4F66' },
+    { code:'K7', name:'铂金棕', hex:'#7A5C3F' },
+  ],
+  wheel: [
+    { code:'W1', name:'21英寸月刃低风阻轮毂' },
+    { code:'W2', name:'21英寸运动轮毂' },
+    { code:'W3', name:'22英寸日冕轮毂' },
+  ],
+  package: [
+    { code:'P1', short:'A', name:'座舱升级包' },
+    { code:'P2', short:'B', name:'AI调光玻璃' },
+    { code:'P3', short:'C', name:'二排娱乐套装' },
+    { code:'P4', short:'D', name:'电动门+DLP' },
+    { code:'P5', short:'E', name:'电动踏板' },
+    { code:'P6', short:'X', name:'线控转向' },
+  ],
+};
+
+const EMPTY_DIMS = { range:[], power:[], exterior:[], interior:[], wheel:[], package:[] };
+
+/* =========================================================================================
+ *  全局状态
+ * ======================================================================================= */
+const state = {
+  dims: structuredClone(SAMPLE_G01),
+  combos: [],
+  selection: new Set(),     // combo IDs
+  filter: { range:'', power:'', exterior:'', interior:'', wheel:'', search:'' },
+  page: 1,
+  pageSize: 50,
+  packagePowerSet: false,   // 选装包是否按 0/1 笛卡尔展开
+  step: 1,
+};
+
+const $  = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove('show'), 1700);
+}
+
+/* =========================================================================================
+ *  Step 1: 维度配置 渲染
+ * ======================================================================================= */
+const DIM_FIELDS = {
+  range:    [{k:'code',ph:'编码',cls:'code'},{k:'name',ph:'名称'},{k:'km',ph:'km',cls:'km',type:'number'}],
+  power:    [{k:'code',ph:'编码',cls:'code'},{k:'name',ph:'名称'}],
+  exterior: [{k:'code',ph:'编码',cls:'code'},{k:'name',ph:'名称'},{k:'hex',type:'color',cls:'color'}],
+  interior: [{k:'code',ph:'编码',cls:'code'},{k:'name',ph:'名称'},{k:'hex',type:'color',cls:'color'}],
+  wheel:    [{k:'code',ph:'编码',cls:'code'},{k:'name',ph:'名称'}],
+  package:  [{k:'code',ph:'编码',cls:'code'},{k:'short',ph:'短码',cls:'code'},{k:'name',ph:'名称'}],
+};
+const DIM_LABELS = { range:'续航版本', power:'动力类型', exterior:'外饰', interior:'内饰', wheel:'轮毂', package:'选装包' };
+
+function renderDimCard(dim) {
+  const card = document.querySelector(`.dim-card[data-dim="${dim}"]`);
+  const body = card.querySelector('.dim-rows');
+  body.innerHTML = '';
+  state.dims[dim].forEach((row, idx) => {
+    const r = document.createElement('div');
+    r.className = 'dim-row';
+    DIM_FIELDS[dim].forEach(f => {
+      const inp = document.createElement('input');
+      inp.type = f.type || 'text';
+      inp.placeholder = f.ph || '';
+      if (f.cls) inp.className = f.cls;
+      inp.value = row[f.k] != null ? row[f.k] : '';
+      inp.addEventListener('input', e => {
+        let v = e.target.value;
+        if (f.type === 'number') v = v === '' ? null : Number(v);
+        state.dims[dim][idx][f.k] = v;
+        updateDimSummary();
+      });
+      r.appendChild(inp);
+    });
+    // power dim 不需要其他字段；range 加 power 选择
+    if (dim === 'range') {
+      const ps = document.createElement('div');
+      ps.className = 'power-select';
+      const powers = state.dims.power.length ? state.dims.power : [{code:'REEV',name:'增程'},{code:'BEV',name:'纯电'}];
+      powers.forEach(p => {
+        const c = document.createElement('div');
+        c.className = 'pchip' + (row.power === p.code ? ' active' : '');
+        c.textContent = p.code;
+        c.title = p.name;
+        c.addEventListener('click', () => {
+          state.dims.range[idx].power = p.code;
+          renderDimCard('range');
+          updateDimSummary();
+        });
+        ps.appendChild(c);
+      });
+      r.appendChild(ps);
+    }
+    const del = document.createElement('button');
+    del.className = 'del'; del.textContent = '×'; del.title = '删除';
+    del.addEventListener('click', () => {
+      state.dims[dim].splice(idx, 1);
+      renderDimCard(dim);
+      updateDimSummary();
+    });
+    r.appendChild(del);
+    body.appendChild(r);
+  });
+}
+
+function renderAllDimCards() {
+  Object.keys(DIM_LABELS).forEach(renderDimCard);
+  updateDimSummary();
+}
+
+function addEmptyRow(dim) {
+  const empty = {};
+  DIM_FIELDS[dim].forEach(f => empty[f.k] = f.type === 'number' ? null : '');
+  if (dim === 'exterior' || dim === 'interior') empty.hex = '#cccccc';
+  if (dim === 'range') empty.power = (state.dims.power[0]||{}).code || '';
+  state.dims[dim].push(empty);
+  renderDimCard(dim);
+  updateDimSummary();
+}
+
+function clearDim(dim) {
+  if (!confirm(`确定清空「${DIM_LABELS[dim]}」全部条目？`)) return;
+  state.dims[dim] = [];
+  renderDimCard(dim);
+  updateDimSummary();
+}
+
+function updateDimSummary() {
+  const valid = dim => state.dims[dim].filter(r => r.code && r.name).length;
+  const counts = ['range','power','exterior','interior','wheel','package'].map(valid);
+  $('#dimSummary').innerHTML = `已配置：续航 <b>${counts[0]}</b> · 动力 <b>${counts[1]}</b> · 外饰 <b>${counts[2]}</b> · 内饰 <b>${counts[3]}</b> · 轮毂 <b>${counts[4]}</b> · 选装包 <b>${counts[5]}</b>`;
+  // re-render power selection chips when power dim changes
+  if (state._lastPowerHash !== JSON.stringify(state.dims.power)) {
+    state._lastPowerHash = JSON.stringify(state.dims.power);
+    if (state.dims.range.length) renderDimCard('range');
+  }
+}
+
+// 维度卡按钮
+document.querySelectorAll('.dim-card').forEach(card => {
+  card.querySelectorAll('button[data-act]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const dim = card.dataset.dim;
+      const act = btn.dataset.act;
+      if (act === 'add') addEmptyRow(dim);
+      if (act === 'clear') clearDim(dim);
+    });
+  });
+});
+
+$('#btnLoadG01').addEventListener('click', () => {
+  state.dims = structuredClone(SAMPLE_G01);
+  renderAllDimCards();
+  toast('已载入小鹏 GX (G01) 示例数据');
+});
+$('#btnClearAll').addEventListener('click', () => {
+  if (!confirm('确定清空全部维度？')) return;
+  state.dims = structuredClone(EMPTY_DIMS);
+  renderAllDimCards();
+  toast('已清空全部维度');
+});
+
+/* =========================================================================================
+ *  Step 切换
+ * ======================================================================================= */
+function goStep(n) {
+  state.step = n;
+  $$('.step-btn').forEach(b => {
+    const i = +b.dataset.step;
+    b.classList.toggle('active', i === n);
+    b.classList.toggle('done', i < n);
+  });
+  [1,2,3,4].forEach(i => {
+    document.getElementById('step-'+i).classList.toggle('hidden', i !== n);
+  });
+  if (n === 2) renderStep2();
+  if (n === 3) renderStep3();
+  if (n === 4) renderStep4();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+$$('.step-btn').forEach(b => b.addEventListener('click', () => goStep(+b.dataset.step)));
+$('#btnGoStep2').addEventListener('click', () => {
+  if (!validateDims()) return;
+  goStep(2);
+});
+$('#btnPrev2').addEventListener('click', () => goStep(1));
+$('#btnGoStep3').addEventListener('click', () => goStep(3));
+$('#btnPrev3').addEventListener('click', () => goStep(2));
+$('#btnGoStep4').addEventListener('click', () => goStep(4));
+$('#btnPrev4').addEventListener('click', () => goStep(3));
+
+function validateDims() {
+  const need = ['range','exterior','interior','wheel'];
+  for (const d of need) {
+    const valid = state.dims[d].filter(r => r.code && r.name);
+    if (valid.length === 0) {
+      toast(`「${DIM_LABELS[d]}」至少需要 1 条有效记录`);
+      return false;
+    }
+  }
+  return true;
+}
+
+/* =========================================================================================
+ *  Step 2: 组合生成
+ * ======================================================================================= */
+function getValid(dim) {
+  return state.dims[dim].filter(r => r.code && r.name);
+}
+
+function renderStep2() {
+  const r = getValid('range'), p = getValid('power'), e = getValid('exterior'),
+        i = getValid('interior'), w = getValid('wheel'), pk = getValid('package');
+  const usePower = p.length > 0;
+  const pkgFactor = state.packagePowerSet ? Math.pow(2, pk.length) : (pk.length ? 2 : 1);
+  const baseTotal = r.length * (usePower ? p.length : 1) * e.length * i.length * w.length;
+  const total = baseTotal * pkgFactor;
+
+  $('#comboFormula').innerHTML = `
+    <span>续航 <b>${r.length}</b></span> ×
+    ${usePower ? `<span>动力 <b>${p.length}</b></span> ×` : '<span style="color:var(--muted)">动力 (未配置，跳过)</span> ×'}
+    <span>外饰 <b>${e.length}</b></span> ×
+    <span>内饰 <b>${i.length}</b></span> ×
+    <span>轮毂 <b>${w.length}</b></span> ×
+    <span>选装包 ${state.packagePowerSet ? `2<sup>${pk.length}</sup> = <b>${pkgFactor}</b>` : `<b>${pkgFactor}</b>`}</span>
+    <span style="margin-left:12px; color:var(--muted)">=</span>
+    <span class="total"><b>${total.toLocaleString()}</b></span> 条
+  `;
+
+  $('#comboSummary').innerHTML = `
+    <div class="combo-stat"><div class="label">基础组合</div><div class="value">${baseTotal.toLocaleString()}</div></div>
+    <div class="combo-stat"><div class="label">选装包因子</div><div class="value">${pkgFactor}</div></div>
+    <div class="combo-stat"><div class="label">总计 SKU</div><div class="value accent">${total.toLocaleString()}</div></div>
+    <div class="combo-stat"><div class="label">已生成</div><div class="value">${state.combos.length.toLocaleString()}</div></div>
+  `;
+
+  $('#btnGoStep3').disabled = state.combos.length === 0;
+}
+
+$('#optPackagePower').addEventListener('change', e => {
+  state.packagePowerSet = e.target.checked;
+  renderStep2();
+});
+
+$('#btnGenerateCombos').addEventListener('click', () => {
+  generateCombos();
+  renderStep2();
+  renderComboPreview();
+  $('#btnGoStep3').disabled = false;
+  toast(`已生成 ${state.combos.length.toLocaleString()} 条组合`);
+});
+
+function generateCombos() {
+  const r = getValid('range'), p = getValid('power'), e = getValid('exterior'),
+        i = getValid('interior'), w = getValid('wheel'), pk = getValid('package');
+  const combos = [];
+  const powers = p.length ? p : [{code:'',name:''}];
+
+  // 选装包组合枚举
+  let pkgSets;
+  if (state.packagePowerSet) {
+    const N = pk.length;
+    pkgSets = [];
+    for (let mask = 0; mask < Math.pow(2, N); mask++) {
+      const s = [];
+      for (let b = 0; b < N; b++) if (mask & (1<<b)) s.push(pk[b]);
+      pkgSets.push(s);
+    }
+  } else if (pk.length === 0) {
+    pkgSets = [[]];
+  } else {
+    pkgSets = [[], pk.slice()]; // 全无 + 全选
+  }
+
+  let id = 0;
+  r.forEach(rng => {
+    powers.forEach(pwr => {
+      e.forEach(ext => {
+        i.forEach(ino => {
+          w.forEach(wh => {
+            pkgSets.forEach(pkgs => {
+              const sku = buildSkuCode(rng, pwr, wh, ext, ino, pkgs);
+              combos.push({
+                id: 'C'+(++id),
+                sku,
+                range: rng,
+                power: pwr.code ? pwr : null,
+                exterior: ext,
+                interior: ino,
+                wheel: wh,
+                packages: pkgs,
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+  state.combos = combos;
+  // 默认全选（拣选 = 移除不要的）
+  state.selection = new Set(combos.map(c => c.id));
+  state.page = 1;
+  state.filter = { range:'', power:'', exterior:'', interior:'', wheel:'', search:'' };
+}
+
+function buildSkuCode(rng, pwr, wh, ext, ino, pkgs) {
+  const parts = [];
+  parts.push(rng.code);
+  if (pwr && pwr.code) parts.push(pwr.code);
+  parts.push(wh.code);
+  parts.push(ext.code);
+  parts.push(ino.code);
+  let core = parts.join('-');
+  if (pkgs.length) {
+    const shorts = pkgs.map(p => p.short || p.code).join('');
+    core += '+' + shorts;
+  }
+  core += '@' + (rng.km != null ? rng.km : '?') + 'km';
+  return core;
+}
+
+function renderComboPreview() {
+  if (!state.combos.length) {
+    $('#comboPreview').innerHTML = '';
+    return;
+  }
+  const head = `<table class="tbl"><thead><tr>
+    <th>#</th><th>SKU 编码</th><th>续航</th><th>动力</th><th>轮毂</th><th>外饰</th><th>内饰</th><th>选装包</th>
+  </tr></thead><tbody>`;
+  const rows = state.combos.slice(0, 30).map((c, idx) => `
+    <tr>
+      <td>${idx+1}</td>
+      <td><code>${c.sku}</code></td>
+      <td>${c.range.name} (${c.range.km}km)</td>
+      <td>${c.power ? `<span class="badge-pwr ${c.power.code.toLowerCase()}">${c.power.name}</span>` : '—'}</td>
+      <td>${c.wheel.name}</td>
+      <td><span class="swatch" style="background:${c.exterior.hex||'#666'}"></span>${c.exterior.name}</td>
+      <td><span class="swatch" style="background:${c.interior.hex||'#666'}"></span>${c.interior.name}</td>
+      <td>${c.packages.map(p=>p.name).join(' · ') || '—'}</td>
+    </tr>
+  `).join('');
+  const tail = `</tbody></table>`;
+  $('#comboPreview').innerHTML = `<details open><summary>预览前 30 条（共 ${state.combos.length.toLocaleString()} 条）</summary><div class="tbl-wrap" style="max-height:340px;">${head+rows+tail}</div></details>`;
+}
+
+/* =========================================================================================
+ *  Step 3: 拣选
+ * ======================================================================================= */
+function renderStep3() {
+  // 填充筛选下拉
+  fillFilterOptions();
+  bindFilterEvents();
+  refreshTable();
+}
+
+function fillFilterOptions() {
+  const fillSel = (sel, items, getCode, getName) => {
+    sel.innerHTML = '<option value="">全部</option>' + items.map(it =>
+      `<option value="${getCode(it)}">${getName(it)}</option>`).join('');
+  };
+  fillSel($('select[data-filter="range"]'),    getValid('range'),    r => r.code, r => `${r.name} (${r.km}km)`);
+  fillSel($('select[data-filter="power"]'),    getValid('power'),    p => p.code, p => p.name);
+  fillSel($('select[data-filter="exterior"]'), getValid('exterior'), e => e.code, e => e.name);
+  fillSel($('select[data-filter="interior"]'), getValid('interior'), i => i.code, i => i.name);
+  fillSel($('select[data-filter="wheel"]'),    getValid('wheel'),    w => w.code, w => w.name);
+}
+
+function bindFilterEvents() {
+  $$('.filter-bar select').forEach(sel => {
+    sel.value = state.filter[sel.dataset.filter] || '';
+    sel.onchange = () => { state.filter[sel.dataset.filter] = sel.value; state.page=1; refreshTable(); };
+  });
+  $('#searchInput').oninput = e => { state.filter.search = e.target.value.trim(); state.page=1; refreshTable(); };
+  $('#btnClearFilter').onclick = () => {
+    state.filter = { range:'', power:'', exterior:'', interior:'', wheel:'', search:'' };
+    state.page = 1;
+    fillFilterOptions(); bindFilterEvents();
+    $('#searchInput').value = '';
+    refreshTable();
+  };
+}
+
+function getFiltered() {
+  const f = state.filter;
+  return state.combos.filter(c =>
+    (!f.range    || c.range.code === f.range) &&
+    (!f.power    || (c.power && c.power.code === f.power)) &&
+    (!f.exterior || c.exterior.code === f.exterior) &&
+    (!f.interior || c.interior.code === f.interior) &&
+    (!f.wheel    || c.wheel.code === f.wheel) &&
+    (!f.search   || (c.sku.toLowerCase().includes(f.search.toLowerCase()) ||
+                     c.exterior.name.includes(f.search) ||
+                     c.interior.name.includes(f.search) ||
+                     c.wheel.name.includes(f.search) ||
+                     c.range.name.includes(f.search) ||
+                     c.packages.some(p=>p.name.includes(f.search))))
+  );
+}
+
+function refreshTable() {
+  const filtered = getFiltered();
+  const total = state.combos.length;
+  $('#totalCount').textContent = total.toLocaleString();
+  $('#filterCount').textContent = filtered.length.toLocaleString();
+  $('#selCount').textContent = state.selection.size.toLocaleString();
+
+  const pageSize = state.pageSize;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  if (state.page > totalPages) state.page = totalPages;
+  const start = (state.page - 1) * pageSize;
+  const pageRows = filtered.slice(start, start + pageSize);
+
+  const tbody = $('#comboTbody');
+  if (pageRows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--muted);">无匹配组合</td></tr>`;
+  } else {
+    tbody.innerHTML = pageRows.map((c, idx) => {
+      const sel = state.selection.has(c.id);
+      return `<tr class="${sel?'selected':''}" data-id="${c.id}">
+        <td><input type="checkbox" ${sel?'checked':''}/></td>
+        <td>${start+idx+1}</td>
+        <td><code>${c.sku}</code></td>
+        <td>${c.range.name} <span style="color:var(--muted)">(${c.range.km}km)</span></td>
+        <td>${c.power ? `<span class="badge-pwr ${c.power.code.toLowerCase()}">${c.power.name}</span>` : '—'}</td>
+        <td>${c.wheel.name}</td>
+        <td><span class="swatch" style="background:${c.exterior.hex||'#666'}"></span>${c.exterior.name}</td>
+        <td><span class="swatch" style="background:${c.interior.hex||'#666'}"></span>${c.interior.name}</td>
+        <td style="white-space:normal; max-width:280px;">${c.packages.map(p=>p.name).join(' · ') || '—'}</td>
+      </tr>`;
+    }).join('');
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const id = tr.dataset.id;
+      tr.querySelector('input[type=checkbox]').addEventListener('change', e => {
+        if (e.target.checked) state.selection.add(id); else state.selection.delete(id);
+        tr.classList.toggle('selected', e.target.checked);
+        $('#selCount').textContent = state.selection.size.toLocaleString();
+        updateChkAllPage();
+      });
+    });
+  }
+  renderPagination(filtered.length);
+  updateChkAllPage();
+}
+
+function updateChkAllPage() {
+  const filtered = getFiltered();
+  const start = (state.page - 1) * state.pageSize;
+  const pageRows = filtered.slice(start, start + state.pageSize);
+  const allSel = pageRows.length && pageRows.every(c => state.selection.has(c.id));
+  const noneSel = pageRows.every(c => !state.selection.has(c.id));
+  const chk = $('#chkAllPage');
+  chk.checked = allSel;
+  chk.indeterminate = !allSel && !noneSel;
+}
+
+$('#chkAllPage').addEventListener('change', e => {
+  const filtered = getFiltered();
+  const start = (state.page - 1) * state.pageSize;
+  const pageRows = filtered.slice(start, start + state.pageSize);
+  if (e.target.checked) pageRows.forEach(c => state.selection.add(c.id));
+  else pageRows.forEach(c => state.selection.delete(c.id));
+  refreshTable();
+});
+
+function renderPagination(total) {
+  const totalPages = Math.max(1, Math.ceil(total / state.pageSize));
+  const cur = state.page;
+  const wrap = $('#pagination');
+  if (totalPages <= 1) { wrap.innerHTML = `<span class="info">共 ${total} 条</span>`; return; }
+  let html = `<button ${cur===1?'disabled':''} data-page="${cur-1}">← 上页</button>`;
+  const pages = pageNumbers(cur, totalPages);
+  pages.forEach(p => {
+    if (p === '...') html += `<span class="ellipsis">…</span>`;
+    else html += `<button class="${p===cur?'active':''}" data-page="${p}">${p}</button>`;
+  });
+  html += `<button ${cur===totalPages?'disabled':''} data-page="${cur+1}">下页 →</button>`;
+  html += `<span class="info">第 ${cur}/${totalPages} 页 · 共 ${total.toLocaleString()} 条</span>`;
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('button[data-page]').forEach(b => {
+    b.addEventListener('click', () => { state.page = +b.dataset.page; refreshTable(); });
+  });
+}
+function pageNumbers(cur, total) {
+  const out = [];
+  const push = x => out.push(x);
+  if (total <= 7) { for (let i=1;i<=total;i++) push(i); return out; }
+  push(1);
+  if (cur > 4) push('...');
+  for (let i=Math.max(2,cur-2); i<=Math.min(total-1,cur+2); i++) push(i);
+  if (cur < total-3) push('...');
+  push(total);
+  return out;
+}
+
+$('#btnSelectFiltered').addEventListener('click', () => {
+  getFiltered().forEach(c => state.selection.add(c.id));
+  refreshTable(); toast('已选中筛选项');
+});
+$('#btnUnselectFiltered').addEventListener('click', () => {
+  getFiltered().forEach(c => state.selection.delete(c.id));
+  refreshTable(); toast('已取消筛选项');
+});
+$('#btnInvertSel').addEventListener('click', () => {
+  getFiltered().forEach(c => {
+    if (state.selection.has(c.id)) state.selection.delete(c.id);
+    else state.selection.add(c.id);
+  });
+  refreshTable(); toast('已反选');
+});
+$('#btnSelectAll').addEventListener('click', () => {
+  state.combos.forEach(c => state.selection.add(c.id));
+  refreshTable(); toast('已全选 ' + state.combos.length.toLocaleString() + ' 条');
+});
+$('#btnSelectNone').addEventListener('click', () => {
+  state.selection.clear();
+  refreshTable(); toast('已全不选');
+});
+
+/* =========================================================================================
+ *  Step 4: 导出表生成
+ * ======================================================================================= */
+function getSelected() {
+  return state.combos.filter(c => state.selection.has(c.id));
+}
+
+function renderStep4() {
+  const sel = getSelected();
+  $('#exportSelCount').textContent = sel.length.toLocaleString();
+  $('#exportRangeCount').textContent = new Set(sel.map(c=>c.range.code)).size;
+  $('#exportExtCount').textContent = new Set(sel.map(c=>c.exterior.code)).size;
+  $('#exportWheelCount').textContent = new Set(sel.map(c=>c.wheel.code)).size;
+
+  renderDetailTable(sel);
+  renderConfigTable(sel);
+  renderMatrixTable(sel);
+}
+
+function renderDetailTable(sel) {
+  const tbl = $('#detailTable');
+  if (sel.length === 0) {
+    tbl.innerHTML = `<tbody><tr><td><div class="empty-state"><div class="icon">📦</div><div class="msg">尚未选择任何 SKU</div></div></td></tr></tbody>`;
+    return;
+  }
+  const head = `<thead><tr>
+    <th>#</th><th>SKU 编码</th><th>续航</th><th>动力</th><th>轮毂</th><th>外饰</th><th>内饰</th><th>选装包</th>
+  </tr></thead>`;
+  const limit = 200;
+  const rows = sel.slice(0, limit).map((c, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td><code>${c.sku}</code></td>
+      <td>${c.range.name} (${c.range.km}km)</td>
+      <td>${c.power ? c.power.name : '—'}</td>
+      <td>${c.wheel.name}</td>
+      <td><span class="swatch" style="background:${c.exterior.hex||'#666'}"></span>${c.exterior.name}</td>
+      <td><span class="swatch" style="background:${c.interior.hex||'#666'}"></span>${c.interior.name}</td>
+      <td style="white-space:normal; max-width:300px;">${c.packages.map(p=>p.name).join(' · ') || '—'}</td>
+    </tr>
+  `).join('');
+  const more = sel.length > limit ? `<tr><td colspan="8" style="text-align:center; padding:14px; color:var(--muted);">… 仅展示前 ${limit} 条 (共 ${sel.length.toLocaleString()})，请使用导出获取全量</td></tr>` : '';
+  tbl.innerHTML = head + '<tbody>' + rows + more + '</tbody>';
+}
+
+function renderConfigTable(sel) {
+  const tbl = $('#configTable');
+  if (sel.length === 0) { tbl.innerHTML = ''; return; }
+  // 按 续航版本+动力 聚合
+  const groups = new Map();
+  sel.forEach(c => {
+    const key = c.range.code + '|' + (c.power ? c.power.code : '-');
+    if (!groups.has(key)) {
+      groups.set(key, {
+        range: c.range, power: c.power,
+        exteriors:new Set(), interiors:new Set(), wheels:new Set(), packages:new Set(),
+        skuCount: 0,
+      });
+    }
+    const g = groups.get(key);
+    g.skuCount++;
+    g.exteriors.add(c.exterior.name);
+    g.interiors.add(c.interior.name);
+    g.wheels.add(c.wheel.name);
+    c.packages.forEach(p => g.packages.add(p.name));
+  });
+  const head = `<thead><tr>
+    <th>续航版本</th><th>动力</th><th>SKU 数</th><th>外饰数</th><th>内饰数</th><th>轮毂数</th><th>选装包合集</th>
+  </tr></thead>`;
+  const rows = [...groups.values()].map(g => `
+    <tr>
+      <td>${g.range.name} <span style="color:var(--muted)">(${g.range.km}km)</span></td>
+      <td>${g.power ? `<span class="badge-pwr ${g.power.code.toLowerCase()}">${g.power.name}</span>` : '—'}</td>
+      <td><code>${g.skuCount}</code></td>
+      <td>${g.exteriors.size}</td>
+      <td>${g.interiors.size}</td>
+      <td>${g.wheels.size}</td>
+      <td style="white-space:normal; max-width:280px;">${[...g.packages].join(' / ') || '—'}</td>
+    </tr>
+  `).join('');
+  tbl.innerHTML = head + '<tbody>' + rows + '</tbody>';
+}
+
+function renderMatrixTable(sel) {
+  const tbl = $('#matrixTable');
+  if (sel.length === 0) { tbl.innerHTML = ''; return; }
+  // 行：续航 × 外饰 ; 列：内饰
+  const ints = [...new Map(sel.map(c=>[c.interior.code, c.interior])).values()];
+  const rowKeys = new Map();
+  sel.forEach(c => {
+    const key = c.range.code + '|' + c.exterior.code;
+    if (!rowKeys.has(key)) rowKeys.set(key, { range:c.range, ext:c.exterior, byInt:{} });
+    const row = rowKeys.get(key);
+    row.byInt[c.interior.code] = (row.byInt[c.interior.code] || 0) + 1;
+  });
+
+  let head = `<thead><tr><th>续航</th><th>外饰</th>`;
+  ints.forEach(i => head += `<th>${i.name}</th>`);
+  head += `<th>合计</th></tr></thead>`;
+
+  const rows = [...rowKeys.values()].map(row => {
+    let html = `<tr>
+      <td>${row.range.name}</td>
+      <td><span class="swatch" style="background:${row.ext.hex||'#666'}"></span>${row.ext.name}</td>`;
+    let sum = 0;
+    ints.forEach(i => {
+      const cnt = row.byInt[i.code] || 0;
+      sum += cnt;
+      html += `<td class="matrix-cell">${cnt ? `<span class="tag-yes">${cnt}</span>` : '<span class="tag-no">—</span>'}</td>`;
+    });
+    html += `<td class="matrix-cell"><code>${sum}</code></td></tr>`;
+    return html;
+  }).join('');
+  tbl.innerHTML = head + '<tbody>' + rows + '</tbody>';
+}
+
+/* =========================================================================================
+ *  Export 工具
+ * ======================================================================================= */
+function download(content, filename, mime) {
+  const blob = new Blob([content], { type: mime + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function toCSV(rows) {
+  const escape = v => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  };
+  return '﻿' + rows.map(r => r.map(escape).join(',')).join('\n');
+}
+function toTSV(rows) {
+  return rows.map(r => r.map(v => v == null ? '' : String(v).replace(/\t/g,' ')).join('\t')).join('\n');
+}
+
+function detailRows() {
+  const sel = getSelected();
+  const head = ['#','SKU编码','续航编码','续航名称','续航km','动力编码','动力名称',
+    '轮毂编码','轮毂名称','外饰编码','外饰名称','外饰色值',
+    '内饰编码','内饰名称','内饰色值','选装包数','选装包列表'];
+  const data = sel.map((c,i) => [
+    i+1, c.sku, c.range.code, c.range.name, c.range.km,
+    c.power?c.power.code:'', c.power?c.power.name:'',
+    c.wheel.code, c.wheel.name,
+    c.exterior.code, c.exterior.name, c.exterior.hex||'',
+    c.interior.code, c.interior.name, c.interior.hex||'',
+    c.packages.length, c.packages.map(p=>p.name).join(' / '),
+  ]);
+  return [head, ...data];
+}
+
+function configRows() {
+  const sel = getSelected();
+  const groups = new Map();
+  sel.forEach(c => {
+    const key = c.range.code + '|' + (c.power?c.power.code:'-');
+    if (!groups.has(key)) groups.set(key, {
+      range:c.range, power:c.power,
+      exts:new Set(), ints:new Set(), wheels:new Set(), pkgs:new Set(), n:0
+    });
+    const g = groups.get(key);
+    g.n++; g.exts.add(c.exterior.name); g.ints.add(c.interior.name);
+    g.wheels.add(c.wheel.name); c.packages.forEach(p=>g.pkgs.add(p.name));
+  });
+  const head = ['续航编码','续航名称','续航km','动力编码','动力名称','SKU数','外饰数','内饰数','轮毂数','外饰列表','内饰列表','轮毂列表','选装包合集'];
+  const rows = [...groups.values()].map(g => [
+    g.range.code, g.range.name, g.range.km,
+    g.power?g.power.code:'', g.power?g.power.name:'',
+    g.n, g.exts.size, g.ints.size, g.wheels.size,
+    [...g.exts].join(' / '), [...g.ints].join(' / '), [...g.wheels].join(' / '), [...g.pkgs].join(' / '),
+  ]);
+  return [head, ...rows];
+}
+
+function matrixRows() {
+  const sel = getSelected();
+  if (!sel.length) return [['(无数据)']];
+  const ints = [...new Map(sel.map(c=>[c.interior.code, c.interior])).values()];
+  const rowKeys = new Map();
+  sel.forEach(c => {
+    const key = c.range.code + '|' + c.exterior.code;
+    if (!rowKeys.has(key)) rowKeys.set(key, { range:c.range, ext:c.exterior, byInt:{} });
+    const row = rowKeys.get(key);
+    row.byInt[c.interior.code] = (row.byInt[c.interior.code] || 0) + 1;
+  });
+  const head = ['续航','外饰', ...ints.map(i=>i.name), '合计'];
+  const rows = [...rowKeys.values()].map(row => {
+    const cells = ints.map(i => row.byInt[i.code] || 0);
+    const sum = cells.reduce((a,b)=>a+b,0);
+    return [`${row.range.name}(${row.range.km}km)`, row.ext.name, ...cells, sum];
+  });
+  return [head, ...rows];
+}
+
+document.querySelectorAll('button[data-export]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const type = btn.dataset.export;
+    if (state.selection.size === 0) { toast('尚未选择任何 SKU'); return; }
+    const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+    if (type === 'detail-csv')   download(toCSV(detailRows()),  `SKU明细表_${ts}.csv`, 'text/csv');
+    if (type === 'detail-json')  download(JSON.stringify(getSelected(), null, 2), `SKU明细表_${ts}.json`, 'application/json');
+    if (type === 'detail-copy')  navigator.clipboard.writeText(toTSV(detailRows())).then(()=>toast('已复制 TSV，可粘贴到 Excel'));
+    if (type === 'config-csv')   download(toCSV(configRows()),  `配置表_${ts}.csv`, 'text/csv');
+    if (type === 'config-json')  download(JSON.stringify(configRows(), null, 2), `配置表_${ts}.json`, 'application/json');
+    if (type === 'matrix-csv')   download(toCSV(matrixRows()),  `外内饰矩阵_${ts}.csv`, 'text/csv');
+    if (!type.includes('copy')) toast('已导出');
+  });
+});
+
+$('#btnExportAll').addEventListener('click', () => {
+  if (state.selection.size === 0) { toast('尚未选择任何 SKU'); return; }
+  const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  const sel = getSelected();
+  const pkg = {
+    generatedAt: new Date().toISOString(),
+    dimensions: state.dims,
+    summary: {
+      totalCombos: state.combos.length,
+      selectedSku: sel.length,
+      ranges: [...new Set(sel.map(c=>c.range.code))],
+    },
+    skuDetail: sel,
+    configTable: configRows(),
+    matrix: matrixRows(),
+  };
+  download(JSON.stringify(pkg, null, 2), `SKU全量包_${ts}.json`, 'application/json');
+  toast('已导出全量包');
+});
+
+/* =========================================================================================
+ *  Boot
+ * ======================================================================================= */
+renderAllDimCards();
+goStep(1);
+</script>
+
+</body>
+</html>
